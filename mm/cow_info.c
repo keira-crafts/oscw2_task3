@@ -88,6 +88,7 @@ SYSCALL_DEFINE2(cow_info, pid_t, pid, struct cow_info __user *, info)
     struct mm_struct *mm;
     struct vm_area_struct *vma;
     struct cow_walk_ctx ctx = {};
+    unsigned long cow_faults;
     int ret = 0;
 
     if (pid < 0)
@@ -106,6 +107,8 @@ SYSCALL_DEFINE2(cow_info, pid_t, pid, struct cow_info __user *, info)
         if (!task)
             return -ESRCH;
     }
+
+    cow_faults = atomic_long_read(&task->cow_fault_count);
 
     mm = get_task_mm(task);
     put_task_struct(task);
@@ -135,7 +138,8 @@ SYSCALL_DEFINE2(cow_info, pid_t, pid, struct cow_info __user *, info)
             if (ret)
                 break;
 
-            /* Where num_cow_vmas is counted. this VMA contains at least one COW page.
+            /* Where num_cow_vmas is counted. this VMA contains at least one COW page. 
+            question: a vma is a cow if every page is cow or if at least one page is cow? 
             */
             if (ctx.vma_has_cow)
                 ctx.info.num_cow_vmas++;
@@ -147,7 +151,9 @@ SYSCALL_DEFINE2(cow_info, pid_t, pid, struct cow_info __user *, info)
 
     if (ret)
         return ret;
-
+    
+    ctx.info.cow_fault_count = cow_faults;
+    
     if (copy_to_user(info, &ctx.info, sizeof(ctx.info)))
         return -EFAULT;
 
